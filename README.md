@@ -87,3 +87,22 @@ VITE_API_URL=http://localhost:4040
 This is still demo-grade (no real user database, in-memory session store),
 but the emails are real. For production you'd add a real database and swap
 Gmail for a transactional email provider (Resend, SendGrid, Postmark).
+
+## Deploying on Render (single Web Service)
+
+The Express server also serves the built frontend, so one service runs everything on one origin (no CORS/cookie issues).
+
+| Setting | Value |
+|---|---|
+| Runtime | Node |
+| Build Command | `npm install && npm run build && npm install --prefix server` |
+| Start Command | `node server/index.js` |
+
+Environment variables (Render dashboard → Environment):
+- `GMAIL_USER`, `GMAIL_APP_PASSWORD`, `SESSION_SECRET`
+- Do **not** set `PORT` — Render provides it.
+
+**Note:** free Render web services block outbound SMTP ports (25/465/587), so Gmail/Nodemailer only works on a paid instance.
+On the free tier, switch `server/index.js` to an HTTPS email API (Resend, Brevo, SendGrid, Postmark).
+
+**Never commit `server/.env`** — keep real secrets only in Render's environment settings.

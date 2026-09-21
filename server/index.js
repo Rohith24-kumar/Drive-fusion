@@ -3,9 +3,15 @@ import express from 'express';
 import session from 'express-session';
 import cors from 'cors';
 import nodemailer from 'nodemailer';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 // Express instance
 const app = express();
+
+// Render (and most hosts) terminate HTTPS in front of the app; trust the proxy
+// so secure cookies and req.protocol work correctly.
+app.set('trust proxy', 1);
 
 // Middlewares
 app.use(cors({
@@ -18,7 +24,8 @@ app.use(session({
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
     resave: false,
     saveUninitialized: true,
-    cookie: { secure: false }, // set true only when served over HTTPS
+    // 'auto' = secure cookie over HTTPS (Render), plain cookie on http://localhost
+    cookie: { secure: 'auto', sameSite: 'lax', maxAge: 10 * 60 * 1000 },
 }));
 
 // Mail transporter (Gmail + App Password)
@@ -96,6 +103,12 @@ app.post('/api/verify-otp', (req, res) => {
     delete req.session.otpExpiresAt;
     res.json({ message: 'Verified.' });
 });
+
+// Serve the built React frontend (run `npm run build` in the project root first)
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const distDir = path.join(__dirname, '..', 'dist');
+app.use(express.static(distDir));
+app.get('*', (req, res) => res.sendFile(path.join(distDir, 'index.html')));
 
 // Start the server
 const PORT = process.env.PORT || 4040;

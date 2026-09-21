@@ -9,7 +9,10 @@
 // needs to change.
 // ---------------------------------------------------------------------------
 
-const SERVER_URL = import.meta.env.VITE_API_URL || 'http://localhost:4040';
+// In production the Express server also serves the built frontend, so the API
+// lives on the same origin (empty string). In dev it defaults to localhost.
+// Set VITE_API_URL at build time only if the API is hosted somewhere else.
+const SERVER_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.PROD ? '' : 'http://localhost:4040');
 
 const USERS_KEY = 'drivefusion_mock_users';
 
@@ -58,7 +61,7 @@ async function requestOtpEmail(email, purpose) {
       body: JSON.stringify({ email, purpose }),
     });
   } catch {
-    throw new ApiError('Could not reach the mail server. Is it running on ' + SERVER_URL + '?');
+    throw new ApiError('Could not reach the mail server. Is it running on ' + (SERVER_URL || 'this site') + '?');
   }
 
   const data = await response.json().catch(() => ({}));
@@ -78,7 +81,7 @@ async function confirmOtp(email, otp) {
       body: JSON.stringify({ email, otp }),
     });
   } catch {
-    throw new ApiError('Could not reach the mail server. Is it running on ' + SERVER_URL + '?');
+    throw new ApiError('Could not reach the mail server. Is it running on ' + (SERVER_URL || 'this site') + '?');
   }
 
   const data = await response.json().catch(() => ({}));
