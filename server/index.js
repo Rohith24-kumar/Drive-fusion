@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import session from 'express-session';
 import cors from 'cors';
-import nodemailer from 'nodemailer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -28,19 +27,42 @@ app.use(session({
     cookie: { secure: 'auto', sameSite: 'lax', maxAge: 10 * 60 * 1000 },
 }));
 
-// Mail transporter (Gmail + App Password)
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
-    },
-});
+// Mail sender: Brevo transactional email REST API (free plan: 300 emails/day).
+// It uses HTTPS (port 443), so it works on Render's free tier, which blocks SMTP ports.
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
+const MAIL_FROM_EMAIL = process.env.MAIL_FROM_EMAIL; // must be a verified sender in Brevo
+const MAIL_FROM_NAME = process.env.MAIL_FROM_NAME || 'DriveFusion';
 
-transporter.verify((err) => {
-    if (err) console.error('[mail] config error:', err.message);
-    else console.log('[mail] ready to send emails from', process.env.GMAIL_USER);
-});
+async function sendMail({ to, subject, html }) {
+    if (!BREVO_API_KEY || !MAIL_FROM_EMAIL) {
+        throw new Error('BREVO_API_KEY and MAIL_FROM_EMAIL must be set.');
+    }
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'api-key': BREVO_API_KEY,
+            'content-type': 'application/json',
+            accept: 'application/json',
+        },
+        body: JSON.stringify({
+            sender: { name: MAIL_FROM_NAME, email: MAIL_FROM_EMAIL },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html,
+        }),
+        signal: AbortSignal.timeout(15000),
+    });
+    if (!response.ok) {
+        const detail = await response.text().catch(() => '');
+        throw new Error(`Brevo responded ${response.status}: ${detail}`);
+    }
+}
+
+if (BREVO_API_KEY && MAIL_FROM_EMAIL) {
+    console.log('[mail] Brevo configured, sending as', MAIL_FROM_EMAIL);
+} else {
+    console.error('[mail] config error: set BREVO_API_KEY and MAIL_FROM_EMAIL');
+}
 
 // Routes
 
@@ -71,12 +93,7 @@ app.post('/api/send-otp', async (req, res) => {
     `;
 
     try {
-        await transporter.sendMail({
-            from: `"DriveFusion" <${process.env.GMAIL_USER}>`,
-            to: email,
-            subject,
-            html,
-        });
+        await sendMail({ to: email, subject, html });
         res.json({ message: 'OTP sent.' });
     } catch (err) {
         console.error('[mail] send failed:', err.message);
